@@ -14,7 +14,7 @@ export class CursorAgentRuntime implements AgentRuntime {
             auto: "auto",
             smart: "sonnet-4.5",
             fast: "composer-1",
-            deep: "gpt-5.1-codex-high",
+            deep: "opus-4.5-thinking",
         };
 
         const selectedModel = opts.model ? modelMap[opts.model] || modelMap.auto : modelMap.auto;
