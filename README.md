@@ -28,8 +28,7 @@ Add the following to your `~/.cursor/mcp.json`:
 {
   "mcpServers": {
     "subagents": {
-      "command": "npx",
-      "args": ["-y", "@da1z/subagents", "--cwd", "${workspaceFolder}"]
+      "command": "npx -y @da1z/subagents --cwd ${workspaceFolder}"
     }
   }
 }
