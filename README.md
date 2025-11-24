@@ -2,6 +2,8 @@
 
 This MCP server brings **subagents** to Cursor. It allows you to delegate complex, multi-step tasks to specialized agents.
 
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en-US/install-mcp?name=subagents&config=eyJjb21tYW5kIjoibnB4IC15IEBkYTF6L3N1YmFnZW50cyAtLWN3ZCAke3dvcmtzcGFjZUZvbGRlcn0ifQ%3D%3D)
+
 ## Features
 
 - **Subagents in Cursor**: Enables agentic workflows directly within Cursor.
