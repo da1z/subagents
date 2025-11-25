@@ -312,8 +312,8 @@ assistant: "I'm going to use the Task tool to launch the greeting-responder agen
           method: "notifications/progress",
           params: {
             progressToken: _meta.progressToken,
-            progress: increaseProgress ? toolCalls + 1 : toolCalls,
-            total: increaseTotal ? totalCalls + 1 : totalCalls,
+            progress: increaseProgress ? ++toolCalls : toolCalls,
+            total: increaseTotal ? ++totalCalls : totalCalls,
             message,
           },
         });
