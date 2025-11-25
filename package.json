@@ -30,6 +30,10 @@
   ],
   "author": "da1z",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/da1z/subagents.git"
+  },
   "engines": {
     "node": ">=22.0.0"
   },
