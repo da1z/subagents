@@ -18,16 +18,10 @@ const argv = yargs(hideBin(process.argv))
       description: "The current working directory",
       demandOption: "The current working directory is required.",
     },
-    runtime: {
-      type: "string",
-      description: "The default agent runtime to use (cursor, claude, gemini)",
-      default: "cursor",
-    },
   })
   .parseSync();
 
 const CWD = argv.cwd;
-const DEFAULT_RUNTIME = argv.runtime;
 
 interface SubAgent {
   name: string;
@@ -147,7 +141,7 @@ async function parseAgentFile(filePath: string): Promise<SubAgent | null> {
 async function scanForAgents(
   dirPath: string,
   agents: SubAgent[],
-  seenAgents: Set<string>
+  seenAgents: Set<string>,
 ) {
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -198,7 +192,7 @@ ${agentList}
         tools: {},
       },
       instructions: serverInstructions,
-    }
+    },
   );
 
   server.registerTool(
@@ -277,19 +271,13 @@ assistant: "I'm going to use the Task tool to launch the greeting-responder agen
           .default("auto")
           .optional()
           .describe(
-            "The intelligence level of the agent. 'auto' (selects the model best fit for the immediate task), 'smart' (best coding performance + agentic tasks), 'fast' (quickest responses with near-frontier intelligence), or 'deep' (maximum reasoning for complex problems). Defaults to 'auto'."
-          ),
-        runtime: z
-          .string()
-          .optional()
-          .describe(
-            "The runtime to use for this task (cursor, claude, gemini). Defaults to the server-configured default."
+            "The intelligence level of the agent. 'auto' (selects the model best fit for the immediate task), 'smart' (best coding performance + agentic tasks), 'fast' (quickest responses with near-frontier intelligence), or 'deep' (maximum reasoning for complex problems). Defaults to 'auto'.",
           ),
       },
     },
     async (
-      { subagent_type, prompt, model, description, runtime },
-      { sendNotification, _meta, signal }
+      { subagent_type, prompt, model, description },
+      { sendNotification, _meta, signal },
     ) => {
       const currentAgents = await discoverAgents();
       const agent = currentAgents.find((a) => a.name === subagent_type);
@@ -309,14 +297,23 @@ assistant: "I'm going to use the Task tool to launch the greeting-responder agen
       }
 
       let toolCalls = 1;
-      const reportProgress = (message: string) => {
+      let totalCalls = 1;
+      const reportProgress = ({
+        message,
+        increaseProgress = false,
+        increaseTotal = false,
+      }: {
+        message: string;
+        increaseProgress?: boolean;
+        increaseTotal?: boolean;
+      }) => {
         if (!_meta?.progressToken) return;
         sendNotification({
           method: "notifications/progress",
           params: {
             progressToken: _meta.progressToken,
-            progress: toolCalls,
-            total: toolCalls,
+            progress: increaseProgress ? toolCalls + 1 : toolCalls,
+            total: increaseTotal ? totalCalls + 1 : totalCalls,
             message,
           },
         });
@@ -332,15 +329,14 @@ assistant: "I'm going to use the Task tool to launch the greeting-responder agen
         ${prompt}`;
       }
 
-      const runtimeName = runtime || DEFAULT_RUNTIME;
-      console.error(`[subagents] Executing agent '${subagent_type}' with runtime '${runtimeName}'`);
+      console.error(`[subagents] Executing agent '${subagent_type}'`);
       console.error(
-        `[subagents] Full prompt length: ${fullPrompt.length} chars`
+        `[subagents] Full prompt length: ${fullPrompt.length} chars`,
       );
 
-      reportProgress(`${subagent_type}: ${description}`);
+      reportProgress({ message: `${subagent_type}: ${description}` });
 
-      const agentRuntime = getRuntime(runtimeName);
+      const agentRuntime = getRuntime("cursor");
       return await agentRuntime.run(
         fullPrompt,
         {
@@ -348,9 +344,9 @@ assistant: "I'm going to use the Task tool to launch the greeting-responder agen
           model,
           signal,
         },
-        reportProgress
+        reportProgress,
       );
-    }
+    },
   );
 
   const transport = new StdioServerTransport();

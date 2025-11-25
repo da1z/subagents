@@ -1,165 +1,178 @@
-
 import { spawn } from "child_process";
 import { AgentRuntime, ExecutionResult, RuntimeOptions } from "./types.js";
 
 export class CursorAgentRuntime implements AgentRuntime {
-    name = "cursor";
+  name = "cursor";
 
-    async run(
-        prompt: string,
-        opts: RuntimeOptions,
-        onProgress: (message: string) => void
-    ): Promise<ExecutionResult> {
-        const modelMap: Record<string, string> = {
-            auto: "auto",
-            smart: "sonnet-4.5",
-            fast: "composer-1",
-            deep: "opus-4.5-thinking",
-        };
+  async run(
+    prompt: string,
+    opts: RuntimeOptions,
+    onProgress: ({
+      message,
+    }: {
+      message: string;
+      increaseProgress?: boolean;
+      increaseTotal?: boolean;
+    }) => void,
+  ): Promise<ExecutionResult> {
+    const modelMap: Record<string, string> = {
+      auto: "auto",
+      smart: "sonnet-4.5",
+      fast: "composer-1",
+      deep: "opus-4.5-thinking",
+    };
 
-        const selectedModel = opts.model ? modelMap[opts.model] || modelMap.auto : modelMap.auto;
+    const selectedModel = opts.model
+      ? modelMap[opts.model] || modelMap.auto
+      : modelMap.auto;
 
-        const args = [
-            "agent",
-            prompt,
-            "--print",
-            "--output-format",
-            "stream-json",
-            "--stream-partial-output",
-            "--model",
-            selectedModel,
-        ];
+    const args = [
+      "agent",
+      prompt,
+      "--print",
+      "--output-format",
+      "stream-json",
+      "--stream-partial-output",
+      "--model",
+      selectedModel,
+    ];
 
-        console.error(`[subagents] Command: cursor-agent ${args.join(" ")}`);
-        console.error(`[subagents] CWD: ${opts.cwd}`);
+    console.error(`[subagents] Command: cursor-agent ${args.join(" ")}`);
+    console.error(`[subagents] CWD: ${opts.cwd}`);
 
-        let agentError = "";
-        let comulatedAssistantMessage = "";
-        let toolCalls = 0;
+    let agentError = "";
+    let comulatedAssistantMessage = "";
 
-        return new Promise((resolve) => {
-            const child = spawn("cursor-agent", args, {
-                cwd: opts.cwd,
-                env: { ...process.env },
-                stdio: ["ignore", "pipe", "pipe"],
-            });
+    return new Promise((resolve) => {
+      const child = spawn("cursor-agent", args, {
+        cwd: opts.cwd,
+        env: { ...process.env },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
 
-            console.error(`[subagents] Child process spawned with PID: ${child.pid}`);
+      console.error(`[subagents] Child process spawned with PID: ${child.pid}`);
 
-            if (opts.signal) {
-                opts.signal.addEventListener("abort", () => {
-                    console.error(`[subagents] Request cancelled, killing agent 'cursor'`);
-                    child.kill();
-                });
+      if (opts.signal) {
+        opts.signal.addEventListener("abort", () => {
+          console.error(
+            `[subagents] Request cancelled, killing agent 'cursor'`,
+          );
+          child.kill();
+        });
+      }
+
+      child.stdout.on("data", (data) => {
+        if (opts.signal?.aborted) return;
+        const lines = data.toString().split("\n");
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const json = JSON.parse(line);
+            if (json.type !== "assistant" && json.type !== "result") {
+              comulatedAssistantMessage = "";
             }
 
-            child.stdout.on("data", (data) => {
-                if (opts.signal?.aborted) return;
-                const lines = data.toString().split("\n");
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    // console.error("[subagents] Processing line...", line); // verbose logging
-                    try {
-                        const json = JSON.parse(line);
-                        if (json.type !== "assistant" && json.type !== "result") {
-                            comulatedAssistantMessage = "";
-                        }
+            if (json.type === "assistant") {
+              comulatedAssistantMessage += json.message.content[0].text;
+              onProgress({
+                message:
+                  comulatedAssistantMessage
+                    .split("\n")
+                    .filter(Boolean)
+                    .at(-1) ?? "Processing...",
+              });
+            }
 
-                        if (json.type === "assistant") {
-                            comulatedAssistantMessage += json.message.content[0].text;
-                            onProgress(
-                                comulatedAssistantMessage
-                                    .split("\n")
-                                    .filter(Boolean)
-                                    .at(-1) ?? "Processing..."
-                            );
-                        }
-
-                        if (json.type === "thinking") {
-                            if (json.subtype === "delta") {
-                                onProgress(
-                                    json.text.length ? `thinking: ${json.text}` : "thinking..."
-                                );
-                            }
-                        }
-
-                        if (json.type === "tool_call") {
-                            const toolName = Object.keys(json.tool_call)[0];
-                            if (json.subtype === "started") {
-                                toolCalls++;
-                                onProgress(
-                                    `Calling ${toolName} with args: ${JSON.stringify(
-                                        json.tool_call[toolName].args
-                                    )}`
-                                );
-                            } else if (json.subtype === "completed") {
-                                onProgress(`Tool ${toolName} completed`);
-                            }
-                        }
-                    } catch (e) {
-                        // If not JSON, ignore or handle error
-                    }
-                }
-            });
-
-            child.stderr.on("data", (data) => {
-                if (opts.signal?.aborted) return;
-                agentError += data.toString();
-                console.error(`[subagents] stderr: ${data}`);
-            });
-
-            child.on("close", (code) => {
-                console.error(`[subagents] Child process closed with code: ${code}`);
-                if (opts.signal?.aborted) {
-                    resolve({
-                        content: [
-                            {
-                                type: "text",
-                                text: "Task cancelled by user",
-                            },
-                        ],
-                        isError: true,
-                    });
-                    return;
-                }
-
-                const finalResult =
-                    comulatedAssistantMessage || "Task completed (no output captured)";
-                if (code === 0) {
-                    resolve({
-                        content: [
-                            {
-                                type: "text",
-                                text: finalResult,
-                            },
-                        ],
-                    });
-                } else {
-                    resolve({
-                        content: [
-                            {
-                                type: "text",
-                                text: `Error executing agent (exit code ${code}): ${agentError}`,
-                            },
-                        ],
-                        isError: true,
-                    });
-                }
-            });
-
-            child.on("error", (err) => {
-                console.error(`[subagents] Child process error: ${err.message}`);
-                if (opts.signal?.aborted) return;
-                resolve({
-                    content: [
-                        {
-                            type: "text",
-                            text: `Failed to start agent process: ${err.message}`,
-                        },
-                    ],
-                    isError: true,
+            if (json.type === "thinking") {
+              if (json.subtype === "delta") {
+                onProgress({
+                  message: json.text.length
+                    ? `thinking: ${json.text}`
+                    : "thinking...",
                 });
-            });
+              }
+            }
+
+            if (json.type === "tool_call") {
+              const toolName = Object.keys(json.tool_call)[0];
+              if (json.subtype === "started") {
+                onProgress({
+                  message: `Calling ${toolName} with args: ${JSON.stringify(
+                    json.tool_call[toolName].args,
+                  )}`,
+                  increaseTotal: true,
+                });
+              } else if (json.subtype === "completed") {
+                onProgress({
+                  message: `Tool ${toolName} completed`,
+                  increaseProgress: true,
+                });
+              }
+            }
+          } catch (e) {
+            // If not JSON, ignore or handle error
+          }
+        }
+      });
+
+      child.stderr.on("data", (data) => {
+        if (opts.signal?.aborted) return;
+        agentError += data.toString();
+        console.error(`[subagents] stderr: ${data}`);
+      });
+
+      child.on("close", (code) => {
+        console.error(`[subagents] Child process closed with code: ${code}`);
+        if (opts.signal?.aborted) {
+          resolve({
+            content: [
+              {
+                type: "text",
+                text: "Task cancelled by user",
+              },
+            ],
+            isError: true,
+          });
+          return;
+        }
+
+        const finalResult =
+          comulatedAssistantMessage || "Task completed (no output captured)";
+        if (code === 0) {
+          resolve({
+            content: [
+              {
+                type: "text",
+                text: finalResult,
+              },
+            ],
+          });
+        } else {
+          resolve({
+            content: [
+              {
+                type: "text",
+                text: `Error executing agent (exit code ${code}): ${agentError}`,
+              },
+            ],
+            isError: true,
+          });
+        }
+      });
+
+      child.on("error", (err) => {
+        console.error(`[subagents] Child process error: ${err.message}`);
+        if (opts.signal?.aborted) return;
+        resolve({
+          content: [
+            {
+              type: "text",
+              text: `Failed to start agent process: ${err.message}`,
+            },
+          ],
+          isError: true,
         });
-    }
+      });
+    });
+  }
 }
