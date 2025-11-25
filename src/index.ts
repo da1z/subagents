@@ -27,6 +27,7 @@ interface SubAgent {
   name: string;
   whenToUse: string;
   path: string;
+  model?: "smart" | "fast" | "deep";
   systemPrompt?: string;
 }
 
@@ -90,6 +91,7 @@ Guidelines:
 
 Complete the user's search request efficiently and report your findings clearly.`,
       path: "",
+      model: "fast",
     },
   ];
   const seenAgents = new Set<string>();
@@ -268,7 +270,6 @@ assistant: "I'm going to use the Task tool to launch the greeting-responder agen
           .describe("The type of specialized agent to use for this task"),
         model: z
           .enum(["auto", "smart", "fast", "deep"])
-          .default("auto")
           .optional()
           .describe(
             "The intelligence level of the agent. 'auto' (selects the model best fit for the immediate task), 'smart' (best coding performance + agentic tasks), 'fast' (quickest responses with near-frontier intelligence), or 'deep' (maximum reasoning for complex problems). Defaults to 'auto'.",
@@ -341,7 +342,7 @@ assistant: "I'm going to use the Task tool to launch the greeting-responder agen
         fullPrompt,
         {
           cwd: CWD,
-          model,
+          model: model ?? agent.model ?? "auto",
           signal,
         },
         reportProgress,
