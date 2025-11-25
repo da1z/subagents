@@ -274,10 +274,16 @@ assistant: "I'm going to use the Task tool to launch the greeting-responder agen
           .describe(
             "The intelligence level of the agent. 'auto' (selects the model best fit for the immediate task), 'smart' (best coding performance + agentic tasks), 'fast' (quickest responses with near-frontier intelligence), or 'deep' (maximum reasoning for complex problems). Defaults to 'auto'.",
           ),
+        cwd: z
+          .string()
+          .optional()
+          .describe(
+            "The current working directory to execute the task in. Defaults to the workspace folder.",
+          ),
       },
     },
     async (
-      { subagent_type, prompt, model, description },
+      { subagent_type, prompt, model, description, cwd },
       { sendNotification, _meta, signal },
     ) => {
       const currentAgents = await discoverAgents();
@@ -341,7 +347,7 @@ assistant: "I'm going to use the Task tool to launch the greeting-responder agen
       return await agentRuntime.run(
         fullPrompt,
         {
-          cwd: CWD,
+          cwd: cwd ?? CWD,
           model: model ?? agent.model ?? "auto",
           signal,
         },
