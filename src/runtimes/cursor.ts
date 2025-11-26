@@ -42,6 +42,7 @@ export class CursorAgentRuntime implements AgentRuntime {
 
     let agentError = "";
     let comulatedAssistantMessage = "";
+    let lineBuffer = "";
 
     return new Promise((resolve) => {
       const child = spawn("cursor-agent", args, {
@@ -63,7 +64,11 @@ export class CursorAgentRuntime implements AgentRuntime {
 
       child.stdout.on("data", (data) => {
         if (opts.signal?.aborted) return;
-        const lines = data.toString().split("\n");
+
+        lineBuffer += data.toString();
+        const lines = lineBuffer.split("\n");
+        lineBuffer = lines.pop() ?? "";
+
         for (const line of lines) {
           if (!line.trim()) continue;
           try {

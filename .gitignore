@@ -34,3 +34,4 @@ coverage/
 
 
 .npmrc
+.claude/settings.local.json
