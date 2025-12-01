@@ -114,6 +114,10 @@ export class CursorAgentRuntime implements AgentRuntime {
                 });
               }
             }
+
+            if (json.type === "result") {
+              comulatedAssistantMessage = json.result ?? "";
+            }
           } catch (e) {
             // If not JSON, ignore or handle error
           }
