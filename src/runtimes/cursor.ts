@@ -1,5 +1,22 @@
 import { spawn } from "child_process";
 import { AgentRuntime, ExecutionResult, RuntimeOptions } from "./types.js";
+import type {
+  ToolCallPayload,
+  ReadToolCall,
+  WriteToolCall,
+  FunctionToolCall,
+} from "./cursor-message-types.js";
+
+// Type guards for tool call payloads
+const isReadToolCall = (payload: ToolCallPayload): payload is ReadToolCall =>
+  "readToolCall" in payload;
+
+const isWriteToolCall = (payload: ToolCallPayload): payload is WriteToolCall =>
+  "writeToolCall" in payload;
+
+const isFunctionToolCall = (
+  payload: ToolCallPayload,
+): payload is FunctionToolCall => "function" in payload;
 
 export class CursorAgentRuntime implements AgentRuntime {
   name = "cursor";
@@ -41,8 +58,10 @@ export class CursorAgentRuntime implements AgentRuntime {
     console.error(`[subagents] CWD: ${opts.cwd}`);
 
     let agentError = "";
-    let comulatedAssistantMessage = "";
+    let lastCompleteAssistantMessage = ""; // Final complete assistant message (no timestamp_ms)
+    let streamingAssistantMessage = ""; // Accumulated streaming partials
     let lineBuffer = "";
+    const seenMessages = new Set<string>(); // Track seen JSON for dedup
 
     return new Promise((resolve) => {
       const child = spawn("cursor-agent", args, {
@@ -73,18 +92,32 @@ export class CursorAgentRuntime implements AgentRuntime {
           if (!line.trim()) continue;
           try {
             const json = JSON.parse(line);
+            const messageKey = JSON.stringify(json);
+            if (seenMessages.has(messageKey)) {
+              continue;
+            }
+            seenMessages.add(messageKey);
+
             if (json.type !== "assistant" && json.type !== "result") {
-              comulatedAssistantMessage = "";
+              streamingAssistantMessage = "";
             }
 
             if (json.type === "assistant") {
-              comulatedAssistantMessage += json.message.content[0].text;
+              const textContent = json.message.content[0].text;
+
+              if (json.timestamp_ms) {
+                streamingAssistantMessage += textContent;
+              } else {
+                lastCompleteAssistantMessage = textContent;
+              }
+
+              // Use streaming message for progress, fall back to complete message
+              const displayMessage =
+                streamingAssistantMessage || lastCompleteAssistantMessage;
               onProgress({
                 message:
-                  comulatedAssistantMessage
-                    .split("\n")
-                    .filter(Boolean)
-                    .at(-1) ?? "Processing...",
+                  displayMessage.split("\n").filter(Boolean).at(-1) ??
+                  "Processing...",
               });
             }
 
@@ -99,24 +132,35 @@ export class CursorAgentRuntime implements AgentRuntime {
             }
 
             if (json.type === "tool_call") {
-              const toolName = Object.keys(json.tool_call)[0];
-              if (json.subtype === "started") {
-                onProgress({
-                  message: `Calling ${toolName} with args: ${JSON.stringify(
-                    json.tool_call[toolName].args,
-                  )}`,
-                  increaseTotal: true,
-                });
-              } else if (json.subtype === "completed") {
-                onProgress({
-                  message: `Tool ${toolName} completed`,
-                  increaseProgress: true,
-                });
-              }
-            }
+              const toolCall = json.tool_call as ToolCallPayload;
 
-            if (json.type === "result") {
-              comulatedAssistantMessage = json.result ?? "";
+              if (json.subtype === "started") {
+                let message = "Processing...";
+                if (isReadToolCall(toolCall)) {
+                  message = `Reading ${toolCall.readToolCall.args.path}`;
+                } else if (isWriteToolCall(toolCall)) {
+                  message = `Writing to ${toolCall.writeToolCall.args.path}`;
+                } else if (isFunctionToolCall(toolCall)) {
+                  message = `Calling ${toolCall.function.name}`;
+                }
+                onProgress({ message, increaseTotal: true });
+              } else if (json.subtype === "completed") {
+                let message = "Completed";
+                if (isReadToolCall(toolCall)) {
+                  const result = toolCall.readToolCall.result?.success;
+                  message = result
+                    ? `Read ${toolCall.readToolCall.args.path} (${result.totalLines} lines)`
+                    : `Read ${toolCall.readToolCall.args.path}`;
+                } else if (isWriteToolCall(toolCall)) {
+                  const result = toolCall.writeToolCall.result?.success;
+                  message = result
+                    ? `Wrote ${result.linesCreated} lines to ${result.path}`
+                    : `Wrote to ${toolCall.writeToolCall.args.path}`;
+                } else if (isFunctionToolCall(toolCall)) {
+                  message = `${toolCall.function.name} completed`;
+                }
+                onProgress({ message, increaseProgress: true });
+              }
             }
           } catch (e) {
             // If not JSON, ignore or handle error
@@ -146,7 +190,8 @@ export class CursorAgentRuntime implements AgentRuntime {
         }
 
         const finalResult =
-          comulatedAssistantMessage || "Task completed (no output captured)";
+          lastCompleteAssistantMessage || "Task completed (no output captured)";
+        console.error(`[subagents] Final result: ${finalResult}`);
         if (code === 0) {
           resolve({
             content: [
