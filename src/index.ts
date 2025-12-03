@@ -9,7 +9,7 @@ import path from "path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { z } from "zod";
-import { getRuntime } from "./runtimes/index.js";
+import { getRuntime, ProgressHandler } from "./runtimes/index.js";
 
 const argv = yargs(hideBin(process.argv))
   .options({
@@ -305,14 +305,10 @@ assistant: "I'm going to use the Task tool to launch the greeting-responder agen
 
       let toolCalls = 1;
       let totalCalls = 1;
-      const reportProgress = ({
+      const reportProgress: ProgressHandler = ({
         message,
         increaseProgress = false,
         increaseTotal = false,
-      }: {
-        message: string;
-        increaseProgress?: boolean;
-        increaseTotal?: boolean;
       }) => {
         if (!_meta?.progressToken) return;
         sendNotification({

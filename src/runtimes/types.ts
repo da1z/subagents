@@ -15,12 +15,12 @@ export interface AgentRuntime {
   run(
     prompt: string,
     opts: RuntimeOptions,
-    onProgress: ({
-      message,
-    }: {
-      message: string;
-      increaseProgress?: boolean;
-      increaseTotal?: boolean;
-    }) => void,
+    onProgress: ProgressHandler,
   ): Promise<ExecutionResult>;
 }
+
+export type ProgressHandler = (params: {
+  message: string;
+  increaseProgress?: boolean;
+  increaseTotal?: boolean;
+}) => void;
