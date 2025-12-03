@@ -3,7 +3,7 @@ import type {
   CursorMessage,
   FunctionToolCall,
   ToolCallEvent,
-} from "./cursor-message-types.js";
+} from "./message-types.js";
 import {
   AgentRuntime,
   ExecutionResult,
