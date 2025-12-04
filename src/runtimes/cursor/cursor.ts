@@ -63,7 +63,9 @@ const getToolName = (message: ToolCallEvent) => {
   );
 };
 
-const toolCallStartedHandler: MessageHandler = (message: CursorMessage) => {
+export const toolCallStartedHandler: MessageHandler = (
+  message: CursorMessage,
+) => {
   if (message.type !== "tool_call" || message.subtype !== "started") return;
   return {
     progress: {
@@ -73,11 +75,13 @@ const toolCallStartedHandler: MessageHandler = (message: CursorMessage) => {
   };
 };
 
-const toolCallCompletedHandler: MessageHandler = (message: CursorMessage) => {
+export const toolCallCompletedHandler: MessageHandler = (
+  message: CursorMessage,
+) => {
   if (message.type !== "tool_call" || message.subtype !== "completed") return;
   return {
     progress: {
-      message: `Completed ${getToolName(message)}`,
+      message: `Completed ${getToolName(message) ?? JSON.stringify(message)}`,
       increaseProgress: true,
     },
   };
