@@ -142,9 +142,9 @@ export class CursorAgentRuntime implements AgentRuntime {
   ): Promise<ExecutionResult> {
     const modelMap: Record<string, string> = {
       auto: "auto",
-      smart: "sonnet-4.5",
       fast: "composer-1",
-      deep: "opus-4.5-thinking",
+      smart: "opus-4.5",
+      deep: "gpt-5.1-codex-max-high",
     };
 
     const selectedModel = opts.model
